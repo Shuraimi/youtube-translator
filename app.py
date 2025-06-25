@@ -30,20 +30,18 @@ def translate_video():
     translated_audio_path = os.path.join(UPLOAD_FOLDER, f"translated_{video_id}.mp3")
 
     try:
-        # Download video and extract audio
+        # Download audio using yt-dlp
         ydl_opts = {
-    'format': 'bestaudio/best',
-    'outtmpl': audio_path,
-    'cookies': 'cookies.txt',  # ✅ This goes here — top-level
-    'postprocessors': [{
-        'key': 'FFmpegExtractAudio',
-        'preferredcodec': 'mp3',
-    }]
-}
-
-with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-    ydl.download([youtube_url])
-
+            'format': 'bestaudio/best',
+            'outtmpl': audio_path,
+            'cookies': 'cookies.txt',  # Ensure cookies.txt exists
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+            }]
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([youtube_url])
 
         # Transcribe audio
         model = whisper.load_model("base")
@@ -82,12 +80,11 @@ with yt_dlp.YoutubeDL(ydl_opts) as ydl:
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
     finally:
         for f in [audio_path, video_path, translated_audio_path]:
             if os.path.exists(f):
                 os.remove(f)
-
-import os
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))  # Use Render's assigned port
