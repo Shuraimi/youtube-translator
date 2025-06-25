@@ -34,7 +34,7 @@ Thumbs.db
 *.swp
 
 # Your yt-dlp cookie session
-cookies.txt  # 👈 this is important for safety!
+#cookies.txt  # 👈 this is important for safety!
 
 # Render deploy config (optional if private)
 render.yaml
