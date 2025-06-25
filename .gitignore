@@ -1,0 +1,40 @@
+# Python cache and environment
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv/
+venv/
+env/
+pip-log.txt
+
+# Flask/Render/Server logs
+instance/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Compiled or temporary files
+*.db
+*.sqlite
+*.bak
+*.swp
+
+# Your yt-dlp cookie session
+cookies.txt  # 👈 this is important for safety!
+
+# Render deploy config (optional if private)
+render.yaml
