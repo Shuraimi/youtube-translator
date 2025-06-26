@@ -2,10 +2,10 @@ from flask import Flask, request, jsonify, render_template
 import os
 from pytube import YouTube
 import whisper
-from googletrans import Translator
 from gtts import gTTS
 import subprocess
 import uuid
+import requests
 
 # Constants
 UPLOAD_FOLDER = "temp"
@@ -16,11 +16,20 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # App setup
 app = Flask(__name__, template_folder='templates')
 
+# Translation function using LibreTranslate
+def translate_text(text, target_lang):
+    response = requests.post(
+        "https://libretranslate.com/translate",
+        params={"q": text, "source": "auto", "target": target_lang, "format": "text"}
+    )
+    if response.status_code == 200:
+        return response.json()["translatedText"]
+    else:
+        raise Exception(f"Translation failed: {response.text}")
 
 @app.route('/')
 def index():
     return render_template('index.html')
-
 
 @app.route('/translate', methods=['POST'])
 def translate_video():
@@ -44,7 +53,7 @@ def translate_video():
         audio_stream = yt.streams.filter(only_audio=True).first()
         audio_stream.download(output_path=UPLOAD_FOLDER, filename=f"{video_id}_audio.mp4")
 
-        # Convert to mp3
+        # Convert to mp3 using ffmpeg
         subprocess.run([
             'ffmpeg', '-y',
             '-i', temp_audio_mp4,
@@ -57,8 +66,7 @@ def translate_video():
         original_text = result["text"]
 
         # Translate
-        translator = Translator()
-        translated_text = translator.translate(original_text, dest=target_lang).text
+        translated_text = translate_text(original_text, target_lang)
 
         # Convert translated text to speech
         tts = gTTS(translated_text, lang=target_lang)
@@ -87,13 +95,13 @@ def translate_video():
         return jsonify({"error": str(e)}), 500
 
     finally:
+        # Cleanup intermediate files
         for f in [temp_audio_mp4, audio_path, video_path, translated_audio_path]:
             try:
                 if os.path.exists(f):
                     os.remove(f)
             except Exception as cleanup_error:
                 print(f"Cleanup failed for {f}: {cleanup_error}")
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
