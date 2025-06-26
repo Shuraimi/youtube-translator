@@ -1,16 +1,13 @@
 from flask import Flask, request, jsonify, render_template
 import os
-import yt_dlp
+from pytube import YouTube
 import whisper
 from googletrans import Translator
 from gtts import gTTS
 import subprocess
 import uuid
-import requests
 
 # Constants
-COOKIES_URL = "https://paste.rs/iSLxu.txt"  # Replace with your actual paste.rs URL
-COOKIES_PATH = "cookies.txt"
 UPLOAD_FOLDER = "temp"
 
 # Create upload folder if not exists
@@ -19,20 +16,11 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # App setup
 app = Flask(__name__, template_folder='templates')
 
-def fetch_cookies():
-    if not os.path.exists(COOKIES_PATH):
-        try:
-            r = requests.get(COOKIES_URL, timeout=10)
-            r.raise_for_status()
-            with open(COOKIES_PATH, "wb") as f:
-                f.write(r.content)
-            print("✅ cookies.txt fetched successfully")
-        except Exception as e:
-            print(f"⚠️ Could not fetch cookies: {e}")
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/translate', methods=['POST'])
 def translate_video():
@@ -48,23 +36,20 @@ def translate_video():
     video_path = os.path.join(UPLOAD_FOLDER, f"{video_id}.mp4")
     translated_audio_path = os.path.join(UPLOAD_FOLDER, f"translated_{video_id}.mp3")
     output_video = os.path.join(UPLOAD_FOLDER, f"translated_{video_id}.mp4")
+    temp_audio_mp4 = os.path.join(UPLOAD_FOLDER, f"{video_id}_audio.mp4")
 
     try:
-        # Fetch cookies from external URL
-        fetch_cookies()
+        # Download audio using pytube
+        yt = YouTube(youtube_url)
+        audio_stream = yt.streams.filter(only_audio=True).first()
+        audio_stream.download(output_path=UPLOAD_FOLDER, filename=f"{video_id}_audio.mp4")
 
-        # Download audio using yt-dlp
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': audio_path,
-            'cookies': COOKIES_PATH,
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-            }]
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([youtube_url])
+        # Convert to mp3
+        subprocess.run([
+            'ffmpeg', '-y',
+            '-i', temp_audio_mp4,
+            '-vn', '-acodec', 'mp3', audio_path
+        ], check=True)
 
         # Transcribe using Whisper
         model = whisper.load_model("base")
@@ -79,13 +64,10 @@ def translate_video():
         tts = gTTS(translated_text, lang=target_lang)
         tts.save(translated_audio_path)
 
-        # Download full video
-        ydl_video_opts = {
-            'format': 'bestvideo+bestaudio/best',
-            'outtmpl': video_path,
-        }
-        with yt_dlp.YoutubeDL(ydl_video_opts) as ydl:
-            ydl.download([youtube_url])
+        # Download full video using pytube
+        video_stream = yt.streams.filter(progressive=True, file_extension='mp4') \
+            .order_by('resolution').desc().first()
+        video_stream.download(output_path=UPLOAD_FOLDER, filename=f"{video_id}_video.mp4")
 
         # Combine translated audio + video
         command = [
@@ -105,12 +87,13 @@ def translate_video():
         return jsonify({"error": str(e)}), 500
 
     finally:
-        for f in [audio_path, video_path, translated_audio_path]:
+        for f in [temp_audio_mp4, audio_path, video_path, translated_audio_path]:
             try:
                 if os.path.exists(f):
                     os.remove(f)
             except Exception as cleanup_error:
                 print(f"Cleanup failed for {f}: {cleanup_error}")
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
